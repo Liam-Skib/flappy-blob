@@ -126,6 +126,8 @@
   let zeusArriveAt = -Infinity;
   let poseidonArriveAt = -Infinity;
   let gameStartTime = 0;
+  let adminMode = false;
+  let scoreMultiplier = 1;
 
   let lastNow = 0;
   let meteorNextAt = 0;
@@ -166,6 +168,8 @@
     zeusArriveAt = -Infinity;
     poseidonArriveAt = -Infinity;
     gameStartTime = 0;
+    adminMode = false;
+    scoreMultiplier = 1;
 
     player = {
       x: PlayerCfg.x,
@@ -231,7 +235,7 @@
 
   function hitPlayer(stunMs, kind) {
     const now = performance.now();
-    if (now < player.invulnUntil) return;
+    if (now < player.invulnUntil || adminMode) return; // Admin mode makes player unkillable
     player.lives = Math.max(0, player.lives - 1);
     player.stage = player.lives;
     player.stunUntil = now + stunMs;
@@ -255,7 +259,7 @@
   }
 
   function collectCoin() {
-    score += 1;
+    score += 1 * scoreMultiplier;
     audio.sfxCoin();
     updateUi();
 
@@ -752,9 +756,10 @@
   }
 
   function drawZeus(t) {
+    if (!inZeus) return;
 
     const zx = W - 150;
-    const zy = 104;
+    const zy = H * 0.4; // More centered position
     const bob = Math.sin(t * 0.0032) * 4;
     const flap = Math.sin(t * 0.01) * 0.8;
     const outline = "rgba(0,0,0,.34)";
@@ -1061,7 +1066,7 @@
         ctx.fill();
       }
       
-      // Underwater ruins (instead of castles)
+      // Underwater ancient ruins (instead of castles)
       const horizonY = World.groundY - 52;
       ctx.globalAlpha = 0.25;
       ctx.fillStyle = "rgba(34,211,238,.20)";
@@ -1099,11 +1104,11 @@
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, H);
 
-      // distant castle silhouettes
+      // distant ancient ruins silhouettes
       const horizonY = World.groundY - 52;
       ctx.save();
       ctx.globalAlpha = 0.28;
-      ctx.fillStyle = "rgba(0,0,0,.25)";
+      ctx.fillStyle = "rgba(139,69,19,.25)";
       roundRect(40, horizonY - 34, 86, 34, 8);
       ctx.fill();
       roundRect(78, horizonY - 64, 28, 32, 10);
@@ -1203,6 +1208,19 @@
       ctx.restore();
     }
 
+    // admin mode indicator
+    if (adminMode && running && !dead) {
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = "rgba(255,215,0,.18)";
+      roundRect(16, 90, 150, 18, 9);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,215,0,.78)";
+      ctx.font = '900 12px "Space Grotesk", system-ui';
+      ctx.fillText("ADMIN MODE", 22, 103);
+      ctx.restore();
+    }
+
     // phase hint
     if (inPoseidon && running && !dead) {
       ctx.save();
@@ -1290,6 +1308,14 @@
     if (k === "r") {
       e.preventDefault();
       reset();
+      return;
+    }
+    if (k === "h") {
+      e.preventDefault();
+      // Toggle admin mode
+      adminMode = !adminMode;
+      scoreMultiplier = adminMode ? 2 : 1;
+      updateUi();
       return;
     }
     if (k === "h") {
