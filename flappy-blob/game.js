@@ -20,6 +20,8 @@
 
   const btnMusic = document.getElementById("btnMusic");
   const btnSfx = document.getElementById("btnSfx");
+  const btnFullscreen = document.getElementById("btnFullscreen");
+  const stage = document.querySelector(".stage");
 
   const W = canvas.width;
   const H = canvas.height;
@@ -276,9 +278,9 @@
       inZeus = false;
       poseidonArriveAt = performance.now();
       charges = [];
-      chargeNextAt = Infinity;
+      chargeNextAt = performance.now() + 600;
       overlaySub.innerHTML = "Poseidon emerges from the depths. The waters rise.";
-      // TODO: Add Poseidon arrival sound
+      audio.sfxPoseidonArrive();
     }
 
     coin.visible = false;
@@ -314,11 +316,12 @@
   }
 
   function spawnWave(now) {
+    const topY = rand(World.ceilingY + 220, World.groundY - 200);
     waves.push({
       x: W + 100,
-      y: World.ceilingY,
+      y: topY,
       width: 60,
-      height: World.groundY - World.ceilingY,
+      height: World.groundY - topY,
       vx: -PoseidonCfg.waveSpeed * rand(0.9, 1.1),
       seed: rand(0, 9999),
     });
@@ -434,9 +437,13 @@
           waves.splice(i, 1);
           continue;
         }
-        // Check collision with player
+        // Collision: player overlaps the wave column AND is below its (wavy) top
         if (player.x + PlayerCfg.r > w.x && player.x - PlayerCfg.r < w.x + w.width) {
-          hitPlayer(PlayerCfg.meteorStunMs, "meteor");
+          const localX = clamp(player.x - w.x, 0, w.width);
+          const topY = w.y + Math.sin((localX / w.width) * Math.PI * 2 + now * 0.005 + w.seed) * 15;
+          if (player.y + PlayerCfg.r > topY) {
+            hitPlayer(PlayerCfg.meteorStunMs, "meteor");
+          }
         }
       }
       
@@ -928,6 +935,176 @@
     ctx.restore();
   }
 
+  function drawPoseidon(t) {
+    if (!inPoseidon) return;
+
+    const zx = W - 150;
+    const zy = H * 0.4;
+    const bob = Math.sin(t * 0.0028) * 5;
+    const wave = Math.sin(t * 0.006) * 0.5;
+    const outline = "rgba(0,0,0,.34)";
+
+    ctx.save();
+    ctx.translate(0, bob);
+
+    // wave/cloud mount of water
+    ctx.shadowColor = "rgba(34,211,238,.32)";
+    ctx.shadowBlur = 22;
+    ctx.fillStyle = "rgba(59,130,246,.22)";
+    ctx.beginPath();
+    ctx.arc(zx - 54, zy + 18, 34, 0, Math.PI * 2);
+    ctx.arc(zx - 12, zy + 10, 44, 0, Math.PI * 2);
+    ctx.arc(zx + 40, zy + 18, 30, 0, Math.PI * 2);
+    ctx.arc(zx + 12, zy + 28, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+
+    // wave crests behind
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      const cy = zy + 22 + i * 8;
+      ctx.moveTo(zx - 80, cy);
+      ctx.bezierCurveTo(zx - 40, cy - 6, zx + 30, cy + 6, zx + 90, cy);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Poseidon body (cartoon)
+    const headX = zx + 8;
+    const headY = zy - 22;
+    const headR = 15;
+
+    // toga (sea-blue)
+    ctx.fillStyle = "rgba(59,130,246,.32)";
+    roundRect(zx - 2, zy - 8, 38, 44, 14);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+
+    // belt (gold)
+    ctx.fillStyle = "rgba(245,208,106,.40)";
+    roundRect(zx + 2, zy + 14, 30, 10, 6);
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+
+    // head
+    ctx.fillStyle = "rgba(255,255,255,.20)";
+    ctx.beginPath();
+    ctx.arc(headX, headY, headR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+
+    // crown of seashells
+    ctx.strokeStyle = "rgba(34,211,238,.85)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(headX, headY - 3, headR * 0.85, 1.1 * Math.PI, 1.9 * Math.PI);
+    ctx.stroke();
+
+    // long flowing beard (sea-foam)
+    ctx.fillStyle = "rgba(220,240,255,.32)";
+    ctx.beginPath();
+    ctx.arc(headX - 10, headY + 14, 11, 0, Math.PI * 2);
+    ctx.arc(headX + 4, headY + 18, 14, 0, Math.PI * 2);
+    ctx.arc(headX + 18, headY + 14, 10, 0, Math.PI * 2);
+    ctx.arc(headX + 2, headY + 26, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+
+    // face
+    ctx.fillStyle = "rgba(0,0,0,.55)";
+    ctx.beginPath();
+    ctx.arc(headX - 5, headY - 2, 2.2, 0, Math.PI * 2);
+    ctx.arc(headX + 5, headY - 2, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,.45)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(headX, headY + 4, 4.8, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.stroke();
+
+    // arms
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(zx + 4, zy + 6);
+    ctx.lineTo(zx - 12, zy + 22);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(zx + 30, zy + 6);
+    ctx.lineTo(zx + 54, zy + 24);
+    ctx.stroke();
+
+    // big trident in hand
+    ctx.save();
+    ctx.translate(zx + 60, zy + 24);
+    ctx.rotate(0.20 + wave * 0.05);
+    ctx.shadowColor = "rgba(34,211,238,.65)";
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = "rgba(220,240,255,.95)";
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    // shaft
+    ctx.beginPath();
+    ctx.moveTo(0, 24);
+    ctx.lineTo(0, -18);
+    ctx.stroke();
+    // three prongs
+    ctx.beginPath();
+    ctx.moveTo(-8, -12);
+    ctx.lineTo(-8, -28);
+    ctx.moveTo(0, -18);
+    ctx.lineTo(0, -34);
+    ctx.moveTo(8, -12);
+    ctx.lineTo(8, -28);
+    ctx.stroke();
+    // base bar
+    ctx.beginPath();
+    ctx.moveTo(-10, -12);
+    ctx.lineTo(10, -12);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // label
+    ctx.fillStyle = "rgba(255,255,255,.72)";
+    ctx.font = '900 12px "Space Grotesk", system-ui';
+    ctx.fillText("POSEIDON", zx - 18, zy - 60);
+
+    // Poseidon arrival flash: two cyan pulses, once.
+    const since = t - poseidonArriveAt;
+    if (Number.isFinite(since) && since >= 0 && since < 900) {
+      const pulse = (start, dur) => {
+        const x = (since - start) / dur;
+        if (x <= 0 || x >= 1) return 0;
+        return Math.sin(Math.PI * x);
+      };
+      const p = Math.max(pulse(90, 220), pulse(460, 240));
+      if (p > 0) {
+        ctx.globalAlpha = 0.22 * p;
+        ctx.fillStyle = "rgba(34,211,238,.55)";
+        ctx.fillRect(-2, -2, W + 4, H + 4);
+      }
+    }
+
+    ctx.restore();
+  }
+
   function drawBlob(t) {
     const x = player.x;
     const y = player.y;
@@ -1189,6 +1366,24 @@
   function drawHud(t) {
     drawHearts();
 
+    // big centered score (top-middle of canvas)
+    ctx.save();
+    const scoreText = String(score);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = '900 56px "Uncial Antiqua", "Space Grotesk", system-ui';
+    ctx.shadowColor = "rgba(0,0,0,.55)";
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "rgba(0,0,0,.32)";
+    ctx.fillText(scoreText, W / 2 + 2, 70);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(255,255,255,.96)";
+    ctx.fillText(scoreText, W / 2, 68);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,.35)";
+    ctx.strokeText(scoreText, W / 2, 68);
+    ctx.restore();
+
     // stun indicator
     const now = performance.now();
     if (now < player.stunUntil && running && !dead) {
@@ -1289,6 +1484,7 @@
     for (const w of waves) drawWave(w, t);
     for (const trident of tridents) drawTrident(t, trident);
     drawZeus(t);
+    drawPoseidon(t);
     drawBlob(t);
     drawHud(t);
     ctx.restore();
@@ -1471,6 +1667,15 @@
       noiseBurst(0.18, 0.10, sfxBus, 600);
     }
 
+    function sfxPoseidonArrive() {
+      if (!sfxEnabled) return;
+      ensureStarted();
+      tone(140, 0.32, "sawtooth", 0.24, sfxBus, -10, 600);
+      tone(220, 0.30, "sine", 0.18, sfxBus, -4, 900);
+      tone(330, 0.26, "triangle", 0.14, sfxBus, 4, 1300);
+      noiseBurst(0.28, 0.14, sfxBus, 350);
+    }
+
     function sfxGameOver() {
       if (!sfxEnabled) return;
       ensureStarted();
@@ -1543,6 +1748,7 @@
       sfxHitZeus,
       sfxStunClick,
       sfxZeusArrive,
+      sfxPoseidonArrive,
       sfxGameOver,
       setMusicEnabled,
       setSfxEnabled,
@@ -1555,6 +1761,50 @@
   btnCloseHelp.addEventListener("click", () => setHelpVisible(false));
   btnRestart.addEventListener("click", () => reset());
 
+  // Fullscreen toggle (good for mobile / tablets)
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function enterFullscreen() {
+    const target = stage || document.documentElement;
+    const req =
+      target.requestFullscreen ||
+      target.webkitRequestFullscreen ||
+      target.webkitEnterFullscreen;
+    if (req) {
+      try {
+        const result = req.call(target);
+        if (result && typeof result.catch === "function") result.catch(() => {});
+      } catch (_) {}
+    }
+  }
+  function exitFullscreen() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) {
+      try {
+        const result = exit.call(document);
+        if (result && typeof result.catch === "function") result.catch(() => {});
+      } catch (_) {}
+    }
+  }
+  function toggleFullscreen() {
+    if (isFullscreen()) exitFullscreen();
+    else enterFullscreen();
+  }
+  function syncFullscreenBtn() {
+    if (!btnFullscreen) return;
+    const on = isFullscreen();
+    btnFullscreen.setAttribute("aria-pressed", on ? "true" : "false");
+    btnFullscreen.textContent = on ? "Exit Fullscreen" : "Fullscreen";
+    document.body.classList.toggle("is-fullscreen", on);
+  }
+  if (btnFullscreen) {
+    btnFullscreen.addEventListener("click", toggleFullscreen);
+    document.addEventListener("fullscreenchange", syncFullscreenBtn);
+    document.addEventListener("webkitfullscreenchange", syncFullscreenBtn);
+    syncFullscreenBtn();
+  }
+
   window.addEventListener("keydown", onKey, { passive: false });
   canvas.addEventListener("pointerdown", onPointerDown, { passive: false });
 
@@ -1563,4 +1813,39 @@
   updateUi();
   reset();
   requestAnimationFrame(frame);
+
+  // Optional QA hook: only enabled when URL contains ?qa=1
+  // Lets automated tests jump phases without hours of gameplay.
+  if (typeof location !== "undefined" && /[?&]qa=1\b/.test(location.search)) {
+    window.__flappyQA = {
+      jumpToZeus() {
+        reset();
+        score = ZeusCfg.threshold;
+        inZeus = true;
+        zeusArriveAt = performance.now();
+        meteors = [];
+        meteorNextAt = Infinity;
+        chargeNextAt = performance.now() + 200;
+        running = true;
+        gameStartTime = performance.now();
+        setOverlayVisible(false);
+        updateUi();
+      },
+      jumpToPoseidon() {
+        reset();
+        score = PoseidonCfg.threshold;
+        inZeus = false;
+        inPoseidon = true;
+        poseidonArriveAt = performance.now();
+        charges = [];
+        meteors = [];
+        meteorNextAt = Infinity;
+        chargeNextAt = performance.now() + 200;
+        running = true;
+        gameStartTime = performance.now();
+        setOverlayVisible(false);
+        updateUi();
+      },
+    };
+  }
 })();
