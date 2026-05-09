@@ -24,7 +24,7 @@
           <div class="sigil" aria-hidden="true"></div>
           <div>
             <div class="title">Flappy Blob</div>
-            <div class="subtitle">medieval skies · meteors · Zeus</div>
+            <div class="subtitle">ancient skies · meteors · Zeus · Poseidon</div>
           </div>
         </div>
 
@@ -44,8 +44,11 @@
         </div>
 
         <div class="actions">
+          <a class="btn" href="../" role="button">Main menu</a>
+          <a class="btn" href="../snake-game/" role="button">Snake Game</a>
           <button class="btn" id="btnMusic" type="button" aria-pressed="false">Music</button>
           <button class="btn" id="btnSfx" type="button" aria-pressed="true">SFX</button>
+          <button class="btn" id="btnFullscreen" type="button" aria-pressed="false">Fullscreen</button>
           <button class="btn btn-primary" id="btnRestart" type="button">Restart</button>
         </div>
       </header>
@@ -57,7 +60,7 @@
           <div class="card">
             <div class="card-title" id="overlayTitle">Press Space to flap</div>
             <div class="card-sub" id="overlaySub">
-              Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over.
+              Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over. At <b>50</b>, Poseidon emerges from the depths.
             </div>
             <div class="row">
               <button class="btn btn-primary" id="btnStart" type="button">Start</button>
@@ -75,6 +78,7 @@
               <li><b>Lives</b>: 3 hearts — hits reduce hearts and briefly stun you</li>
               <li><b>Coin</b>: +1 score, respawns after 250ms at a random visible Y</li>
               <li><b>Zeus</b>: at score 25 meteors vanish; lightning charges stun longer</li>
+              <li><b>Poseidon</b>: at score 50 the seas rise — fly over rolling waves and dodge tridents</li>
               <li><b>Restart</b>: R (or the Restart button)</li>
             </ul>
             <div class="row">
