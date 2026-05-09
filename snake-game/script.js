@@ -35,9 +35,9 @@
   const choice = (arr) => arr[(Math.random() * arr.length) | 0];
 
   const Difficulties = {
-    easy: { label: "Easy", grid: 20, tickMs: 135 },
-    medium: { label: "Medium", grid: 24, tickMs: 110 },
-    hard: { label: "Hard", grid: 30, tickMs: 82 },
+    easy: { label: "Easy", grid: 10, tickMs: 135 },
+    medium: { label: "Medium", grid: 12, tickMs: 110 },
+    hard: { label: "Hard", grid: 16, tickMs: 82 },
   };
 
   let difficultyKey = "medium";
