@@ -62,7 +62,7 @@
     maxVy: 760,
     hurtInvulnMs: 380,
     meteorStunMs: 100,
-    zeusStunMs: 250,
+    zeusStunMs: 300,
   };
 
   const CoinCfg = {
@@ -88,6 +88,17 @@
     r: 14,
   };
 
+  const PoseidonCfg = {
+    threshold: 50,
+    waveSpeed: 80,
+    waveSpawnEveryMs: 2000,
+    waveJitter: 400,
+    tridentSpeed: 180,
+    tridentSpawnEveryMs: 1500,
+    tridentJitter: 300,
+    tridentStickMs: 1000,
+  };
+
   /** @type {{x:number,y:number,vy:number,lives:number,stunUntil:number,invulnUntil:number,stage:number,flapQueued:boolean}} */
   let player;
 
@@ -100,12 +111,21 @@
   /** @type {{x:number,y:number,r:number,vx:number,phase:number,seed:number}} */
   let charges = [];
 
+  /** @type {{x:number,y:number,width:number,height:number,vx:number,seed:number}} */
+  let waves = [];
+
+  /** @type {{x:number,y:number,vx:number,stuck:boolean,stickUntil:number,seed:number}} */
+  let tridents = [];
+
   let score = 0;
   let best = bestInit;
   let running = false;
   let dead = false;
   let inZeus = false;
+  let inPoseidon = false;
   let zeusArriveAt = -Infinity;
+  let poseidonArriveAt = -Infinity;
+  let gameStartTime = 0;
 
   let lastNow = 0;
   let meteorNextAt = 0;
@@ -123,18 +143,29 @@
   function updateUi() {
     elScore.textContent = String(score);
     elBest.textContent = String(best);
-    elPhase.textContent = inZeus ? "Zeus" : "Meteors";
+    if (inPoseidon) {
+      elPhase.textContent = "Poseidon";
+    } else if (inZeus) {
+      elPhase.textContent = "Zeus";
+    } else {
+      elPhase.textContent = "Meteors";
+    }
   }
 
   function reset() {
     score = 0;
     inZeus = false;
+    inPoseidon = false;
     running = false;
     dead = false;
     meteors = [];
     charges = [];
+    waves = [];
+    tridents = [];
     shakeT = 0;
     zeusArriveAt = -Infinity;
+    poseidonArriveAt = -Infinity;
+    gameStartTime = 0;
 
     player = {
       x: PlayerCfg.x,
@@ -159,7 +190,7 @@
 
     overlayTitle.textContent = "Press Space to flap";
     overlaySub.innerHTML =
-      "Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over.";
+      "Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over. At <b>50</b> score, Poseidon emerges from the depths.";
     setOverlayVisible(true);
     updateUi();
     draw(0, 0);
@@ -167,6 +198,9 @@
 
   function start() {
     if (dead) reset();
+    if (gameStartTime === 0) {
+      gameStartTime = performance.now();
+    }
     running = true;
     dead = false;
     setOverlayVisible(false);
@@ -202,7 +236,12 @@
     player.stage = player.lives;
     player.stunUntil = now + stunMs;
     player.invulnUntil = now + PlayerCfg.hurtInvulnMs;
-    player.vy = Math.min(player.vy + 180, PlayerCfg.maxVy);
+    // For Zeus zap, prevent movement completely during stun
+    if (kind === "zeus") {
+      player.vy = 0;
+    } else {
+      player.vy = Math.min(player.vy + 180, PlayerCfg.maxVy);
+    }
     shakeT = 1;
     if (kind === "meteor") audio.sfxHitMeteor();
     else audio.sfxHitZeus();
@@ -220,13 +259,22 @@
     audio.sfxCoin();
     updateUi();
 
-    if (!inZeus && score >= ZeusCfg.threshold) {
+    // Check for phase transitions
+    if (!inZeus && !inPoseidon && score >= ZeusCfg.threshold) {
       inZeus = true;
       zeusArriveAt = performance.now();
       meteors = [];
       meteorNextAt = Infinity;
       overlaySub.innerHTML = "Zeus has arrived. The sky crackles with wrath.";
       audio.sfxZeusArrive();
+    } else if (inZeus && !inPoseidon && score >= PoseidonCfg.threshold) {
+      inPoseidon = true;
+      inZeus = false;
+      poseidonArriveAt = performance.now();
+      charges = [];
+      chargeNextAt = Infinity;
+      overlaySub.innerHTML = "Poseidon emerges from the depths. The waters rise.";
+      // TODO: Add Poseidon arrival sound
     }
 
     coin.visible = false;
@@ -261,8 +309,34 @@
     chargeNextAt = now + ZeusCfg.spawnEveryMs + rand(-ZeusCfg.jitter, ZeusCfg.jitter);
   }
 
+  function spawnWave(now) {
+    waves.push({
+      x: W + 100,
+      y: World.ceilingY,
+      width: 60,
+      height: World.groundY - World.ceilingY,
+      vx: -PoseidonCfg.waveSpeed * rand(0.9, 1.1),
+      seed: rand(0, 9999),
+    });
+  }
+
+  function spawnTrident(now) {
+    tridents.push({
+      x: W + 40,
+      y: rand(World.ceilingY + 50, World.groundY - 50),
+      vx: -PoseidonCfg.tridentSpeed * rand(0.9, 1.1),
+      stuck: false,
+      stickUntil: 0,
+      seed: rand(0, 9999),
+    });
+  }
+
   function step(dt, now) {
     if (!running || dead) return;
+
+    // Time-based difficulty progression
+    const gameTime = (now - gameStartTime) / 1000; // in seconds
+    const difficultyMultiplier = 1 + gameTime * 0.02; // 2% increase per second
 
     // Input → flap
     if (player.flapQueued) {
@@ -275,8 +349,12 @@
       }
     }
 
-    // Physics
-    player.vy = clamp(player.vy + PlayerCfg.gravity * dt, -1000, PlayerCfg.maxVy);
+    // Physics - prevent movement during Zeus stun
+    if (now < player.stunUntil) {
+      player.vy = 0; // No movement during stun
+    } else {
+      player.vy = clamp(player.vy + PlayerCfg.gravity * dt, -1000, PlayerCfg.maxVy);
+    }
     player.y += player.vy * dt;
 
     if (player.y + PlayerCfg.r >= World.groundY) return gameOver();
@@ -294,12 +372,14 @@
       coinRespawn();
     }
 
-    // Obstacles
-    if (!inZeus) {
+    // Obstacles with time-based difficulty
+    if (!inZeus && !inPoseidon) {
+      // Meteor phase with time-based difficulty
+      const adjustedMeteorSpawn = MeteorCfg.spawnEveryMs / difficultyMultiplier;
       if (now >= meteorNextAt) spawnMeteor(now);
       for (let i = meteors.length - 1; i >= 0; i--) {
         const m = meteors[i];
-        m.x += m.vx * dt;
+        m.x += m.vx * (1 + difficultyMultiplier * 0.1) * dt; // Speed increases over time
         m.seed += m.spin * dt;
         if (m.x < -m.r - 60) {
           meteors.splice(i, 1);
@@ -309,11 +389,13 @@
         const rr = (PlayerCfg.r + m.r * 0.92) * (PlayerCfg.r + m.r * 0.92);
         if (d2 <= rr) hitPlayer(PlayerCfg.meteorStunMs, "meteor");
       }
-    } else {
+    } else if (inZeus) {
+      // Zeus phase with time-based difficulty
+      const adjustedChargeSpawn = ZeusCfg.spawnEveryMs / difficultyMultiplier;
       if (now >= chargeNextAt) spawnCharge(now);
       for (let i = charges.length - 1; i >= 0; i--) {
         const c = charges[i];
-        c.x += c.vx * dt;
+        c.x += c.vx * (1 + difficultyMultiplier * 0.1) * dt;
         c.phase += dt * 6.2;
         c.y += Math.sin(c.phase) * 35 * dt;
         if (c.x < -80) {
@@ -323,6 +405,70 @@
         const d2 = dist2(player.x, player.y, c.x, c.y);
         const rr = (PlayerCfg.r + c.r) * (PlayerCfg.r + c.r);
         if (d2 <= rr) hitPlayer(PlayerCfg.zeusStunMs, "zeus");
+      }
+    } else if (inPoseidon) {
+      // Poseidon phase with time-based difficulty
+      const adjustedWaveSpawn = PoseidonCfg.waveSpawnEveryMs / difficultyMultiplier;
+      const adjustedTridentSpawn = PoseidonCfg.tridentSpawnEveryMs / difficultyMultiplier;
+      
+      if (now >= chargeNextAt) {
+        // Alternate between waves and tridents
+        if (Math.random() < 0.5) {
+          spawnWave(now);
+          chargeNextAt = now + adjustedWaveSpawn + rand(-PoseidonCfg.waveJitter, PoseidonCfg.waveJitter);
+        } else {
+          spawnTrident(now);
+          chargeNextAt = now + adjustedTridentSpawn + rand(-PoseidonCfg.tridentJitter, PoseidonCfg.tridentJitter);
+        }
+      }
+      
+      // Update waves
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const w = waves[i];
+        w.x += w.vx * (1 + difficultyMultiplier * 0.05) * dt;
+        if (w.x < -w.width - 100) {
+          waves.splice(i, 1);
+          continue;
+        }
+        // Check collision with player
+        if (player.x + PlayerCfg.r > w.x && player.x - PlayerCfg.r < w.x + w.width) {
+          hitPlayer(PlayerCfg.meteorStunMs, "meteor");
+        }
+      }
+      
+      // Update tridents
+      for (let i = tridents.length - 1; i >= 0; i--) {
+        const t = tridents[i];
+        if (t.stuck) {
+          // Trident is stuck in wall
+          if (now >= t.stickUntil) {
+            // Pull back
+            t.vx = Math.abs(PoseidonCfg.tridentSpeed) * 1.5;
+            t.stuck = false;
+          }
+        } else {
+          // Normal movement
+          t.x += t.vx * (1 + difficultyMultiplier * 0.1) * dt;
+          
+          // Check if trident hits left wall
+          if (t.x < 50 && !t.stuck) {
+            t.stuck = true;
+            t.stickUntil = now + PoseidonCfg.tridentStickMs;
+            t.vx = 0;
+          }
+        }
+        
+        if (t.x < -50 || t.x > W + 50) {
+          tridents.splice(i, 1);
+          continue;
+        }
+        
+        // Check collision with player (only when not stuck)
+        if (!t.stuck) {
+          const d2 = dist2(player.x, player.y, t.x, t.y);
+          const rr = (PlayerCfg.r + 8) * (PlayerCfg.r + 8);
+          if (d2 <= rr) hitPlayer(PlayerCfg.zeusStunMs, "zeus");
+        }
       }
     }
 
@@ -516,8 +662,96 @@
     ctx.restore();
   }
 
+  function drawWave(w, t) {
+    const x = w.x;
+    const y = w.y;
+    const width = w.width;
+    const height = w.height;
+    
+    ctx.save();
+    
+    // Water wave effect
+    const waveOffset = Math.sin(t * 0.003 + w.seed) * 10;
+    
+    // Wave gradient
+    const waveGradient = ctx.createLinearGradient(x, y, x + width, y + height);
+    waveGradient.addColorStop(0, "rgba(34,211,238,.35)");
+    waveGradient.addColorStop(0.5, "rgba(59,130,246,.45)");
+    waveGradient.addColorStop(1, "rgba(37,99,235,.35)");
+    
+    ctx.fillStyle = waveGradient;
+    ctx.globalAlpha = 0.8;
+    
+    // Draw wavy shape
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    
+    for (let i = 0; i <= width; i += 5) {
+      const waveY = y + Math.sin((i / width) * Math.PI * 2 + t * 0.005 + w.seed) * 15;
+      ctx.lineTo(x + i, waveY);
+    }
+    
+    ctx.lineTo(x + width, y + height);
+    ctx.lineTo(x, y + height);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Wave outline
+    ctx.strokeStyle = "rgba(255,255,255,.3)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+
+  function drawTrident(t, trident) {
+    const x = trident.x;
+    const y = trident.y;
+    const stuck = trident.stuck;
+    
+    ctx.save();
+    
+    // Trident glow
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 30);
+    glow.addColorStop(0, "rgba(59,130,246,.4)");
+    glow.addColorStop(0.6, "rgba(37,99,235,.2)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 40, y - 40, 80, 80);
+    
+    // Trident body
+    ctx.strokeStyle = stuck ? "rgba(255,100,100,.8)" : "rgba(147,197,253,.9)";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    
+    // Main shaft
+    ctx.beginPath();
+    ctx.moveTo(x - 20, y);
+    ctx.lineTo(x + 20, y);
+    ctx.stroke();
+    
+    // Three prongs
+    ctx.beginPath();
+    ctx.moveTo(x + 20, y);
+    ctx.lineTo(x + 30, y - 8);
+    ctx.moveTo(x + 20, y);
+    ctx.lineTo(x + 30, y);
+    ctx.moveTo(x + 20, y);
+    ctx.lineTo(x + 30, y + 8);
+    ctx.stroke();
+    
+    // Handle
+    ctx.strokeStyle = "rgba(139,92,56,.8)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 20, y);
+    ctx.lineTo(x - 35, y);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+
   function drawZeus(t) {
-    if (!inZeus) return;
 
     const zx = W - 150;
     const zy = 104;
@@ -804,69 +1038,123 @@
 
   function drawBackdrop(t) {
     ctx.save();
-    // cartoon sky gradient (more saturated)
-    const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, "rgba(96,165,250,.18)");
-    sky.addColorStop(0.45, "rgba(167,139,250,.12)");
-    sky.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, W, H);
-
-    // distant castle silhouettes
-    const horizonY = World.groundY - 52;
-    ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.fillStyle = "rgba(0,0,0,.25)";
-    roundRect(40, horizonY - 34, 86, 34, 8);
-    ctx.fill();
-    roundRect(78, horizonY - 64, 28, 32, 10);
-    ctx.fill();
-    roundRect(118, horizonY - 52, 26, 20, 8);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(80, horizonY - 64);
-    ctx.lineTo(92, horizonY - 82);
-    ctx.lineTo(104, horizonY - 64);
-    ctx.closePath();
-    ctx.fill();
-
-    roundRect(W - 190, horizonY - 28, 110, 28, 8);
-    ctx.fill();
-    roundRect(W - 150, horizonY - 60, 36, 34, 12);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(W - 150, horizonY - 60);
-    ctx.lineTo(W - 132, horizonY - 84);
-    ctx.lineTo(W - 114, horizonY - 60);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-
-    // fluffy clouds with outlines
-    const drift = Math.sin(t * 0.00022) * 20;
-    const outline = "rgba(0,0,0,.22)";
-    function cloud(cx, cy, s) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.scale(s, s);
-      ctx.fillStyle = "rgba(255,255,255,.16)";
-      ctx.beginPath();
-      ctx.arc(-36, 8, 24, 0, Math.PI * 2);
-      ctx.arc(-10, 0, 32, 0, Math.PI * 2);
-      ctx.arc(26, 8, 22, 0, Math.PI * 2);
-      ctx.arc(6, 18, 20, 0, Math.PI * 2);
+    
+    if (inPoseidon) {
+      // Underwater theme for Poseidon
+      const underwater = ctx.createLinearGradient(0, 0, 0, H);
+      underwater.addColorStop(0, "rgba(34,211,238,.25)");
+      underwater.addColorStop(0.3, "rgba(59,130,246,.20)");
+      underwater.addColorStop(0.7, "rgba(37,99,235,.15)");
+      underwater.addColorStop(1, "rgba(15,52,96,.10)");
+      ctx.fillStyle = underwater;
+      ctx.fillRect(0, 0, W, H);
+      
+      // Underwater bubbles
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = "rgba(255,255,255,.15)";
+      for (let i = 0; i < 8; i++) {
+        const bubbleX = (i * 120 + t * 0.02) % (W + 40) - 20;
+        const bubbleY = 100 + Math.sin(i * 1.5) * 50 + Math.sin(t * 0.001 + i) * 20;
+        const bubbleR = 4 + Math.sin(i * 2.3) * 2;
+        ctx.beginPath();
+        ctx.arc(bubbleX, bubbleY, bubbleR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Underwater ruins (instead of castles)
+      const horizonY = World.groundY - 52;
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = "rgba(34,211,238,.20)";
+      roundRect(40, horizonY - 34, 86, 34, 8);
       ctx.fill();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = outline;
-      ctx.stroke();
-      ctx.restore();
-    }
-    cloud(220 + drift, 96, 1.15);
-    cloud(520 - drift * 0.65, 160, 1.35);
-    cloud(720 + drift * 0.9, 118, 1.25);
+      roundRect(78, horizonY - 64, 28, 32, 10);
+      ctx.fill();
+      roundRect(118, horizonY - 52, 26, 20, 8);
+      ctx.fill();
+      
+      roundRect(W - 190, horizonY - 28, 110, 28, 8);
+      ctx.fill();
+      roundRect(W - 150, horizonY - 60, 36, 34, 12);
+      ctx.fill();
+      
+      // Seaweed
+      ctx.strokeStyle = "rgba(34,211,238,.4)";
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 6; i++) {
+        const seaweedX = 80 + i * 140;
+        const seaweedY = World.groundY;
+        ctx.beginPath();
+        ctx.moveTo(seaweedX, seaweedY);
+        const sway = Math.sin(t * 0.002 + i * 0.8) * 15;
+        ctx.quadraticCurveTo(seaweedX + sway, seaweedY - 30, seaweedX + sway * 0.5, seaweedY - 60);
+        ctx.stroke();
+      }
+      
+    } else {
+      // Normal sky gradient
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "rgba(96,165,250,.18)");
+      sky.addColorStop(0.45, "rgba(167,139,250,.12)");
+      sky.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, W, H);
 
-    // ridge + ground (slightly more cartoony)
-    ctx.fillStyle = "rgba(0,0,0,.16)";
+      // distant castle silhouettes
+      const horizonY = World.groundY - 52;
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "rgba(0,0,0,.25)";
+      roundRect(40, horizonY - 34, 86, 34, 8);
+      ctx.fill();
+      roundRect(78, horizonY - 64, 28, 32, 10);
+      ctx.fill();
+      roundRect(118, horizonY - 52, 26, 20, 8);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(80, horizonY - 64);
+      ctx.lineTo(92, horizonY - 82);
+      ctx.lineTo(104, horizonY - 64);
+      ctx.closePath();
+      ctx.fill();
+
+      roundRect(W - 190, horizonY - 28, 110, 28, 8);
+      ctx.fill();
+      roundRect(W - 150, horizonY - 60, 36, 34, 12);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(W - 150, horizonY - 60);
+      ctx.lineTo(W - 132, horizonY - 84);
+      ctx.lineTo(W - 114, horizonY - 60);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      // fluffy clouds with outlines
+      const drift = Math.sin(t * 0.00022) * 20;
+      const outline = "rgba(0,0,0,.22)";
+      function cloud(cx, cy, s) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(s, s);
+        ctx.fillStyle = "rgba(255,255,255,.16)";
+        ctx.beginPath();
+        ctx.arc(-36, 8, 24, 0, Math.PI * 2);
+        ctx.arc(-10, 0, 32, 0, Math.PI * 2);
+        ctx.arc(26, 8, 22, 0, Math.PI * 2);
+        ctx.arc(6, 18, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = outline;
+        ctx.stroke();
+        ctx.restore();
+      }
+      cloud(220 + drift, 96, 1.15);
+      cloud(520 - drift * 0.65, 160, 1.35);
+      cloud(720 + drift * 0.9, 118, 1.25);
+    }
+
+    // ridge + ground
+    ctx.fillStyle = inPoseidon ? "rgba(15,52,96,.20)" : "rgba(0,0,0,.16)";
     ctx.beginPath();
     ctx.moveTo(0, World.groundY);
     ctx.bezierCurveTo(W * 0.2, World.groundY - 44, W * 0.5, World.groundY - 22, W * 0.75, World.groundY - 54);
@@ -874,12 +1162,12 @@
     ctx.closePath();
     ctx.fill();
 
-    ctx.fillStyle = "rgba(0,0,0,.24)";
+    ctx.fillStyle = inPoseidon ? "rgba(15,52,96,.28)" : "rgba(0,0,0,.24)";
     ctx.fillRect(0, World.groundY, W, H - World.groundY);
 
-    // runes on ground with chunkier strokes
+    // ground decorations
     ctx.globalAlpha = 0.20;
-    ctx.strokeStyle = "rgba(245,208,106,.28)";
+    ctx.strokeStyle = inPoseidon ? "rgba(34,211,238,.28)" : "rgba(245,208,106,.28)";
     ctx.lineWidth = 2;
     for (let i = 0; i < 10; i++) {
       const x = 52 + i * 92;
@@ -916,7 +1204,17 @@
     }
 
     // phase hint
-    if (inZeus && running && !dead) {
+    if (inPoseidon && running && !dead) {
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "rgba(0,0,0,.18)";
+      roundRect(W - 190, 16, 174, 32, 16);
+      ctx.fill();
+      ctx.fillStyle = "rgba(34,211,238,.78)";
+      ctx.font = '900 12px "Space Grotesk", system-ui';
+      ctx.fillText("POSEIDON PHASE", W - 178, 36);
+      ctx.restore();
+    } else if (inZeus && running && !dead) {
       ctx.save();
       ctx.globalAlpha = 0.85;
       ctx.fillStyle = "rgba(0,0,0,.18)";
@@ -926,7 +1224,7 @@
       ctx.font = '900 12px "Space Grotesk", system-ui';
       ctx.fillText("ZEUS PHASE", W - 168, 36);
       ctx.restore();
-    } else if (!inZeus && score >= 20 && running && !dead) {
+    } else if (!inZeus && !inPoseidon && score >= 20 && running && !dead) {
       const k = clamp((score - 20) / 5, 0, 1);
       ctx.save();
       ctx.globalAlpha = 0.8;
@@ -936,6 +1234,17 @@
       ctx.fillStyle = `rgba(167,139,250,${0.35 + 0.35 * k})`;
       ctx.font = '900 12px "Space Grotesk", system-ui';
       ctx.fillText(`ZEUS INCOMING: ${Math.max(0, ZeusCfg.threshold - score)}`, W - 228, 36);
+      ctx.restore();
+    } else if (inZeus && !inPoseidon && score >= 45 && running && !dead) {
+      const k = clamp((score - 45) / 5, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = "rgba(0,0,0,.18)";
+      roundRect(W - 280, 16, 264, 32, 16);
+      ctx.fill();
+      ctx.fillStyle = `rgba(34,211,238,${0.35 + 0.35 * k})`;
+      ctx.font = '900 12px "Space Grotesk", system-ui';
+      ctx.fillText(`POSEIDON INCOMING: ${Math.max(0, PoseidonCfg.threshold - score)}`, W - 258, 36);
       ctx.restore();
     }
   }
@@ -959,6 +1268,8 @@
     drawCoin(t);
     for (const m of meteors) drawMeteor(m, t);
     for (const c of charges) drawCharge(c, t);
+    for (const w of waves) drawWave(w, t);
+    for (const trident of tridents) drawTrident(t, trident);
     drawZeus(t);
     drawBlob(t);
     drawHud(t);
