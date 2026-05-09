@@ -1,0 +1,6 @@
+.cursor/
+terminals/
+agent-transcripts/
+.DS_Store
+Thumbs.db
+*.log

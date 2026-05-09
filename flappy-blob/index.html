@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flappy Blob</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Uncial+Antiqua&family=Space+Grotesk:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true">
+      <div class="stars"></div>
+      <div class="fog"></div>
+    </div>
+
+    <main class="shell">
+      <header class="top">
+        <div class="brand">
+          <div class="sigil" aria-hidden="true"></div>
+          <div>
+            <div class="title">Flappy Blob</div>
+            <div class="subtitle">medieval skies · meteors · Zeus</div>
+          </div>
+        </div>
+
+        <div class="stats" role="group" aria-label="Stats">
+          <div class="stat">
+            <div class="k">Score</div>
+            <div class="v" id="score">0</div>
+          </div>
+          <div class="stat">
+            <div class="k">High</div>
+            <div class="v" id="best">0</div>
+          </div>
+          <div class="stat">
+            <div class="k">Phase</div>
+            <div class="v" id="phase">Meteors</div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" id="btnMusic" type="button" aria-pressed="false">Music</button>
+          <button class="btn" id="btnSfx" type="button" aria-pressed="true">SFX</button>
+          <button class="btn btn-primary" id="btnRestart" type="button">Restart</button>
+        </div>
+      </header>
+
+      <section class="stage" aria-label="Flappy Blob game">
+        <canvas id="game" width="900" height="720"></canvas>
+
+        <div class="overlay" id="overlay" aria-live="polite">
+          <div class="card">
+            <div class="card-title" id="overlayTitle">Press Space to flap</div>
+            <div class="card-sub" id="overlaySub">
+              Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over.
+            </div>
+            <div class="row">
+              <button class="btn btn-primary" id="btnStart" type="button">Start</button>
+              <button class="btn" id="btnHow" type="button">How to play</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="help" id="help" hidden>
+          <div class="card">
+            <div class="card-title">How to play</div>
+            <ul class="list">
+              <li><b>Flap</b>: Space (or tap/click)</li>
+              <li><b>Movement</b>: only vertical (gravity pulls you down)</li>
+              <li><b>Lives</b>: 3 hearts — hits reduce hearts and briefly stun you</li>
+              <li><b>Coin</b>: +1 score, respawns after 250ms at a random visible Y</li>
+              <li><b>Zeus</b>: at score 25 meteors vanish; lightning charges stun longer</li>
+              <li><b>Restart</b>: R (or the Restart button)</li>
+            </ul>
+            <div class="row">
+              <button class="btn btn-primary" id="btnCloseHelp" type="button">Got it</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <div class="keys">
+          <span class="key">Space</span> flap · <span class="key">R</span> restart ·
+          <span class="key">Click</span> / <span class="key">Tap</span> flap
+        </div>
+        <div class="tip" id="tip">Tip: after a hit, you’re stunned briefly — plan your altitude.</div>
+      </footer>
+    </main>
+
+    <script defer src="./game.js"></script>
+  </body>
+</html>

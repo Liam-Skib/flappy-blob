@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Snake</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="bg" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="orb orb-c"></div>
+      <div class="grid"></div>
+      <div class="noise"></div>
+    </div>
+
+    <main class="shell">
+      <header class="top">
+        <div class="brand">
+          <div class="logo" aria-hidden="true"></div>
+          <div>
+            <div class="title">Neon Snake</div>
+            <div class="subtitle">smooth · snappy · aesthetic</div>
+          </div>
+        </div>
+
+        <div class="stats" role="group" aria-label="Game stats">
+          <div class="stat">
+            <div class="k">Score</div>
+            <div class="v" id="score">0</div>
+          </div>
+          <div class="stat">
+            <div class="k">Best</div>
+            <div class="v" id="best">0</div>
+          </div>
+          <div class="stat">
+            <div class="k">Difficulty</div>
+            <div class="v" id="speed">Medium</div>
+          </div>
+        </div>
+
+        <div class="pills" role="group" aria-label="Difficulty">
+          <button class="chip" id="diffEasy" type="button" aria-pressed="false">Easy</button>
+          <button class="chip" id="diffMedium" type="button" aria-pressed="true">Medium</button>
+          <button class="chip" id="diffHard" type="button" aria-pressed="false">Hard</button>
+        </div>
+
+        <div class="actions">
+          <a class="btn" href="./flappy-blob/" role="button">Flappy Blob</a>
+          <button class="btn" id="btnMusic" type="button" aria-pressed="false">
+            Music
+          </button>
+          <button class="btn" id="btnSfx" type="button" aria-pressed="true">
+            SFX
+          </button>
+          <button class="btn" id="btnPause" type="button" aria-pressed="false">
+            Pause
+          </button>
+          <button class="btn btn-primary" id="btnRestart" type="button">
+            Restart
+          </button>
+        </div>
+      </header>
+
+      <section class="stage" aria-label="Snake game">
+        <canvas id="game" width="768" height="768"></canvas>
+
+        <div class="hud" id="hud" aria-live="polite">
+          <div class="hud-card">
+            <div class="hud-title" id="hudTitle">Press Space to start</div>
+            <div class="hud-hint">
+              Move with <span class="pill">WASD</span> / <span class="pill">Arrows</span>,
+              pause with <span class="pill">P</span>, restart with <span class="pill">R</span>.
+            </div>
+            <div class="hud-row">
+              <button class="btn btn-primary" id="btnStart" type="button">
+                Start
+              </button>
+              <button class="btn" id="btnShowHelp" type="button">Help</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="help" id="help" hidden>
+          <div class="help-card">
+            <div class="help-title">Controls</div>
+            <ul class="help-list">
+              <li><b>Move</b>: Arrow keys / WASD / swipe</li>
+              <li><b>Pause</b>: P or the Pause button</li>
+              <li><b>Restart</b>: R or the Restart button</li>
+            </ul>
+            <div class="help-row">
+              <button class="btn btn-primary" id="btnCloseHelp" type="button">
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="touch" aria-label="Touch controls">
+          <button class="dpad up" id="tUp" type="button" aria-label="Up"></button>
+          <button class="dpad left" id="tLeft" type="button" aria-label="Left"></button>
+          <button class="dpad right" id="tRight" type="button" aria-label="Right"></button>
+          <button class="dpad down" id="tDown" type="button" aria-label="Down"></button>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <div class="keys">
+          <span class="key">Space</span> start · <span class="key">P</span> pause ·
+          <span class="key">R</span> restart
+        </div>
+        <div class="tip" id="tip">
+          Eat the prism. Avoid the walls. Don’t bite your own glow.
+        </div>
+      </footer>
+    </main>
+
+    <script defer src="./script.js"></script>
+  </body>
+</html>
