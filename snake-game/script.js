@@ -280,19 +280,6 @@
     updateUi();
   }
 
-  function roundRect(x, y, w, h, r) {
-    const rr = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rr);
-    ctx.arcTo(x + w, y + h, x, y + h, rr);
-    ctx.arcTo(x, y + h, x, y, rr);
-    ctx.arcTo(x, y, x + w, y, rr);
-    ctx.closePath();
-  }
-
-  // Intentionally removed the "box outline" board stroke for a cleaner look.
-
   function drawGrid(t) {
     ctx.save();
     ctx.globalAlpha = 0.18;
@@ -438,10 +425,30 @@
     ctx.fillStyle = "rgba(0,0,0,.65)";
     const eyeOff = CELL * 0.11;
     ctx.beginPath();
-    ctx.arc(hx + eyeOff * (dir.y !== 0 ? 1 : 0) + eyeOff * (dir.x === 1 ? 1 : dir.x === -1 ? -1 : 0), hy - eyeOff * (dir.x !== 0 ? 1 : 0) - eyeOff * (dir.y === 1 ? 1 : dir.y === -1 ? -1 : 0), CELL * 0.06, 0, Math.PI * 2);
+    ctx.arc(
+      hx +
+        eyeOff * (dir.y !== 0 ? 1 : 0) +
+        eyeOff * (dir.x === 1 ? 1 : dir.x === -1 ? -1 : 0),
+      hy -
+        eyeOff * (dir.x !== 0 ? 1 : 0) -
+        eyeOff * (dir.y === 1 ? 1 : dir.y === -1 ? -1 : 0),
+      CELL * 0.06,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(hx - eyeOff * (dir.y !== 0 ? 1 : 0) + eyeOff * (dir.x === 1 ? 1 : dir.x === -1 ? -1 : 0), hy + eyeOff * (dir.x !== 0 ? 1 : 0) - eyeOff * (dir.y === 1 ? 1 : dir.y === -1 ? -1 : 0), CELL * 0.06, 0, Math.PI * 2);
+    ctx.arc(
+      hx -
+        eyeOff * (dir.y !== 0 ? 1 : 0) +
+        eyeOff * (dir.x === 1 ? 1 : dir.x === -1 ? -1 : 0),
+      hy +
+        eyeOff * (dir.x !== 0 ? 1 : 0) -
+        eyeOff * (dir.y === 1 ? 1 : dir.y === -1 ? -1 : 0),
+      CELL * 0.06,
+      0,
+      Math.PI * 2,
+    );
     ctx.fill();
 
     ctx.restore();
@@ -733,7 +740,6 @@
       musicTimer = null;
     }
 
-    // init buttons
     btnMusic.addEventListener("click", () => setMusicEnabled(!musicEnabled));
     btnSfx.addEventListener("click", () => setSfxEnabled(!sfxEnabled));
     btnMusic.setAttribute("aria-pressed", musicEnabled ? "true" : "false");
@@ -767,3 +773,4 @@
   resetGame();
   requestAnimationFrame(frame);
 })();
+
