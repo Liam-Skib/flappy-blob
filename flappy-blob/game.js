@@ -91,12 +91,24 @@
   const PoseidonCfg = {
     threshold: 50,
     waveSpeed: 80,
-    waveSpawnEveryMs: 2000,
-    waveJitter: 400,
+    waveSpawnEveryMs: 3500,
+    waveJitter: 600,
     tridentSpeed: 180,
-    tridentSpawnEveryMs: 1500,
-    tridentJitter: 300,
+    tridentSpawnEveryMs: 2000,
+    tridentJitter: 400,
     tridentStickMs: 1000,
+  };
+
+  const ArtemisCfg = {
+    threshold: 75,
+    arrowSpeed: 300,
+    volleySpawnEveryMs: 2500,
+    volleyJitter: 500,
+    snareSpeed: 120,
+    snareSpawnEveryMs: 4000,
+    snareJitter: 800,
+    snareAmplitude: 80,
+    snareFrequency: 0.003,
   };
 
   /** @type {{x:number,y:number,vy:number,lives:number,stunUntil:number,invulnUntil:number,stage:number,flapQueued:boolean}} */
@@ -117,14 +129,22 @@
   /** @type {{x:number,y:number,vx:number,stuck:boolean,stickUntil:number,seed:number}} */
   let tridents = [];
 
+  /** @type {{x:number,y:number,vx:number,seed:number}} */
+  let arrows = [];
+
+  /** @type {{x:number,y:number,vx:number,phase:number,seed:number}} */
+  let snares = [];
+
   let score = 0;
   let best = bestInit;
   let running = false;
   let dead = false;
   let inZeus = false;
   let inPoseidon = false;
+  let inArtemis = false;
   let zeusArriveAt = -Infinity;
   let poseidonArriveAt = -Infinity;
+  let artemisArriveAt = -Infinity;
   let gameStartTime = 0;
   let adminMode = false;
   let scoreMultiplier = 1;
@@ -132,6 +152,10 @@
   let lastNow = 0;
   let meteorNextAt = 0;
   let chargeNextAt = 0;
+  let poseidonNextWaveAt = 0;
+  let poseidonNextTridentAt = 0;
+  let artemisNextVolleyAt = 0;
+  let artemisNextSnareAt = 0;
   let shakeT = 0;
 
   function setOverlayVisible(v) {
@@ -145,7 +169,9 @@
   function updateUi() {
     elScore.textContent = String(score);
     elBest.textContent = String(best);
-    if (inPoseidon) {
+    if (inArtemis) {
+      elPhase.textContent = "Artemis";
+    } else if (inPoseidon) {
       elPhase.textContent = "Poseidon";
     } else if (inZeus) {
       elPhase.textContent = "Zeus";
@@ -158,15 +184,19 @@
     score = 0;
     inZeus = false;
     inPoseidon = false;
+    inArtemis = false;
     running = false;
     dead = false;
     meteors = [];
     charges = [];
     waves = [];
     tridents = [];
+    arrows = [];
+    snares = [];
     shakeT = 0;
     zeusArriveAt = -Infinity;
     poseidonArriveAt = -Infinity;
+    artemisArriveAt = -Infinity;
     gameStartTime = 0;
     adminMode = false;
     scoreMultiplier = 1;
@@ -194,7 +224,7 @@
 
     overlayTitle.textContent = "Press Space to flap";
     overlaySub.innerHTML =
-      "Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over. At <b>50</b> score, Poseidon emerges from the depths.";
+      "Collect <b>coins</b>, dodge <b>meteors</b> — at <b>25</b> score, Zeus takes over. At <b>50</b> score, Poseidon emerges from the depths. At <b>75</b> score, Artemis appears in the Silverwood Grove.";
     setOverlayVisible(true);
     updateUi();
     draw(0, 0);
@@ -279,6 +309,16 @@
       chargeNextAt = Infinity;
       overlaySub.innerHTML = "Poseidon emerges from the depths. The waters rise.";
       // TODO: Add Poseidon arrival sound
+    } else if (inPoseidon && !inArtemis && score >= ArtemisCfg.threshold) {
+      inArtemis = true;
+      inPoseidon = false;
+      artemisArriveAt = performance.now();
+      waves = [];
+      tridents = [];
+      poseidonNextWaveAt = Infinity;
+      poseidonNextTridentAt = Infinity;
+      overlaySub.innerHTML = "Artemis appears in the Silverwood Grove. The hunt begins.";
+      // TODO: Add Artemis arrival sound
     }
 
     coin.visible = false;
@@ -335,12 +375,47 @@
     });
   }
 
+  function spawnVolley(now) {
+    // Spawn 3 arrows at different heights: high, middle, low
+    const heights = [
+      World.ceilingY + 40,  // High
+      H * 0.5,            // Middle  
+      World.groundY - 40     // Low
+    ];
+    
+    heights.forEach((y, index) => {
+      setTimeout(() => {
+        arrows.push({
+          x: W + 30,
+          y: y,
+          vx: -ArtemisCfg.arrowSpeed * rand(0.95, 1.05),
+          seed: rand(0, 9999),
+        });
+      }, index * 100); // Stagger the arrows by 100ms
+    });
+  }
+
+  function spawnSnare(now) {
+    snares.push({
+      x: W + 50,
+      y: H * 0.5,
+      vx: -ArtemisCfg.snareSpeed * rand(0.9, 1.1),
+      phase: rand(0, Math.PI * 2),
+      seed: rand(0, 9999),
+    });
+  }
+
   function step(dt, now) {
     if (!running || dead) return;
 
-    // Time-based difficulty progression
-    const gameTime = (now - gameStartTime) / 1000; // in seconds
-    const difficultyMultiplier = 1 + gameTime * 0.02; // 2% increase per second
+    // Phase-specific time-based difficulty progression
+    let phaseStartTime = gameStartTime;
+    if (inZeus) phaseStartTime = zeusArriveAt;
+    else if (inPoseidon) phaseStartTime = poseidonArriveAt;
+    else if (inArtemis) phaseStartTime = artemisArriveAt;
+    
+    const phaseTime = (now - phaseStartTime) / 1000; // in seconds
+    const difficultyMultiplier = 1 + phaseTime * 0.01; // 1% increase per second within phase
 
     // Input → flap
     if (player.flapQueued) {
@@ -415,15 +490,16 @@
       const adjustedWaveSpawn = PoseidonCfg.waveSpawnEveryMs / difficultyMultiplier;
       const adjustedTridentSpawn = PoseidonCfg.tridentSpawnEveryMs / difficultyMultiplier;
       
-      if (now >= chargeNextAt) {
-        // Alternate between waves and tridents
-        if (Math.random() < 0.5) {
-          spawnWave(now);
-          chargeNextAt = now + adjustedWaveSpawn + rand(-PoseidonCfg.waveJitter, PoseidonCfg.waveJitter);
-        } else {
-          spawnTrident(now);
-          chargeNextAt = now + adjustedTridentSpawn + rand(-PoseidonCfg.tridentJitter, PoseidonCfg.tridentJitter);
-        }
+      // Spawn waves
+      if (now >= poseidonNextWaveAt) {
+        spawnWave(now);
+        poseidonNextWaveAt = now + adjustedWaveSpawn + rand(-PoseidonCfg.waveJitter, PoseidonCfg.waveJitter);
+      }
+      
+      // Spawn tridents
+      if (now >= poseidonNextTridentAt) {
+        spawnTrident(now);
+        poseidonNextTridentAt = now + adjustedTridentSpawn + rand(-PoseidonCfg.tridentJitter, PoseidonCfg.tridentJitter);
       }
       
       // Update waves
@@ -473,6 +549,53 @@
           const rr = (PlayerCfg.r + 8) * (PlayerCfg.r + 8);
           if (d2 <= rr) hitPlayer(PlayerCfg.zeusStunMs, "zeus");
         }
+      }
+    } else if (inArtemis) {
+      // Artemis phase with time-based difficulty
+      const adjustedVolleySpawn = ArtemisCfg.volleySpawnEveryMs / difficultyMultiplier;
+      const adjustedSnareSpawn = ArtemisCfg.snareSpawnEveryMs / difficultyMultiplier;
+      
+      // Spawn volleys
+      if (now >= artemisNextVolleyAt) {
+        spawnVolley(now);
+        artemisNextVolleyAt = now + adjustedVolleySpawn + rand(-ArtemisCfg.volleyJitter, ArtemisCfg.volleyJitter);
+      }
+      
+      // Spawn snares
+      if (now >= artemisNextSnareAt) {
+        spawnSnare(now);
+        artemisNextSnareAt = now + adjustedSnareSpawn + rand(-ArtemisCfg.snareJitter, ArtemisCfg.snareJitter);
+      }
+      
+      // Update arrows
+      for (let i = arrows.length - 1; i >= 0; i--) {
+        const a = arrows[i];
+        a.x += a.vx * (1 + difficultyMultiplier * 0.1) * dt;
+        if (a.x < -30) {
+          arrows.splice(i, 1);
+          continue;
+        }
+        // Check collision with player
+        const d2 = dist2(player.x, player.y, a.x, a.y);
+        const rr = (PlayerCfg.r + 4) * (PlayerCfg.r + 4);
+        if (d2 <= rr) hitPlayer(PlayerCfg.meteorStunMs, "meteor");
+      }
+      
+      // Update snares (constellation snare - sine wave movement)
+      for (let i = snares.length - 1; i >= 0; i--) {
+        const s = snares[i];
+        s.x += s.vx * (1 + difficultyMultiplier * 0.05) * dt;
+        s.phase += dt * 2; // Sine wave frequency
+        s.y = H * 0.5 + Math.sin(s.phase) * ArtemisCfg.snareAmplitude;
+        
+        if (s.x < -50) {
+          snares.splice(i, 1);
+          continue;
+        }
+        // Check collision with player
+        const d2 = dist2(player.x, player.y, s.x, s.y);
+        const rr = (PlayerCfg.r + 12) * (PlayerCfg.r + 12);
+        if (d2 <= rr) hitPlayer(PlayerCfg.meteorStunMs, "meteor");
       }
     }
 
@@ -752,6 +875,145 @@
     ctx.lineTo(x - 35, y);
     ctx.stroke();
     
+    ctx.restore();
+  }
+
+  function drawArrow(arrow, t) {
+    const x = arrow.x;
+    const y = arrow.y;
+    
+    ctx.save();
+    
+    // Arrow glow
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 25);
+    glow.addColorStop(0, "rgba(192,192,192,.4)");
+    glow.addColorStop(0.6, "rgba(169,169,169,.2)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 30, y - 30, 60, 60);
+    
+    // Arrow shaft
+    ctx.strokeStyle = "rgba(192,192,192,.8)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 15, y);
+    ctx.lineTo(x + 12, y);
+    ctx.stroke();
+    
+    // Arrow head
+    ctx.fillStyle = "rgba(192,192,192,.9)";
+    ctx.beginPath();
+    ctx.moveTo(x + 12, y);
+    ctx.lineTo(x + 18, y - 4);
+    ctx.lineTo(x + 18, y + 4);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Fletching
+    ctx.fillStyle = "rgba(169,169,169,.7)";
+    ctx.beginPath();
+    ctx.moveTo(x - 15, y);
+    ctx.lineTo(x - 20, y - 3);
+    ctx.lineTo(x - 20, y + 3);
+    ctx.closePath();
+    ctx.fill();
+    
+    ctx.restore();
+  }
+
+  function drawSnare(snare, t) {
+    const x = snare.x;
+    const y = snare.y;
+    
+    ctx.save();
+    
+    // Star cluster glow
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 35);
+    glow.addColorStop(0, "rgba(147,51,234,.4)");
+    glow.addColorStop(0.6, "rgba(126,34,206,.2)");
+    glow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 40, y - 40, 80, 80);
+    
+    // Draw multiple stars in cluster
+    for (let i = 0; i < 5; i++) {
+      const starX = x + Math.cos(snare.phase + i * 1.2) * 15;
+      const starY = y + Math.sin(snare.phase + i * 1.2) * 15;
+      const starSize = 4 + Math.sin(t * 0.01 + i) * 2;
+      
+      ctx.fillStyle = "rgba(200,180,255,.8)";
+      ctx.beginPath();
+      ctx.arc(starX, starY, starSize, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Connecting lines between stars
+    ctx.strokeStyle = "rgba(147,51,234,.3)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const starX = x + Math.cos(snare.phase + i * 1.2) * 15;
+      const starY = y + Math.sin(snare.phase + i * 1.2) * 15;
+      if (i === 0) {
+        ctx.moveTo(starX, starY);
+      } else {
+        ctx.lineTo(starX, starY);
+      }
+    }
+    ctx.closePath();
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+
+  function drawArtemis(t) {
+    if (!inArtemis) return;
+
+    const ax = W - 150;
+    const ay = H * 0.3;
+    const bob = Math.sin(t * 0.0028) * 3;
+    const outline = "rgba(0,0,0,.34)";
+
+    ctx.save();
+    ctx.translate(0, bob);
+
+    // Bow glow
+    const bowGlow = ctx.createRadialGradient(ax, ay, 0, ax, ay, 60);
+    bowGlow.addColorStop(0, "rgba(192,192,192,.3)");
+    bowGlow.addColorStop(0.6, "rgba(169,169,169,.15)");
+    bowGlow.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = bowGlow;
+    ctx.fillRect(ax - 70, ay - 70, 140, 140);
+
+    // Bow
+    ctx.strokeStyle = "rgba(192,192,192,.8)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(ax - 20, ay, 40, -0.3, 0.3);
+    ctx.stroke();
+
+    // Bowstring
+    ctx.strokeStyle = "rgba(255,255,255,.6)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ax - 20, ay - 40);
+    ctx.lineTo(ax - 20, ay + 40);
+    ctx.stroke();
+
+    // Artemis figure (simplified)
+    ctx.fillStyle = "rgba(192,192,192,.2)";
+    ctx.beginPath();
+    ctx.arc(ax + 10, ay, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = outline;
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = "rgba(255,255,255,.68)";
+    ctx.font = '900 12px "Space Grotesk", system-ui';
+    ctx.fillText("ARTEMIS", ax - 25, ay - 80);
+
     ctx.restore();
   }
 
@@ -1095,6 +1357,132 @@
         ctx.stroke();
       }
       
+    } else if (inArtemis) {
+      // Silverwood Grove - midnight forest with full moon
+      const forest = ctx.createLinearGradient(0, 0, 0, H);
+      forest.addColorStop(0, "rgba(25,25,112,.25)");
+      forest.addColorStop(0.3, "rgba(37,37,94,.20)");
+      forest.addColorStop(0.7, "rgba(19,19,58,.15)");
+      forest.addColorStop(1, "rgba(10,10,35,.10)");
+      ctx.fillStyle = forest;
+      ctx.fillRect(0, 0, W, H);
+      
+      // Massive full moon
+      const moonX = W * 0.7;
+      const moonY = H * 0.15;
+      const moonR = H * 0.12;
+      const moonPulse = Math.sin(t * 0.001) * 0.1 + 1;
+      
+      // Moon glow
+      const moonGlow = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, moonR * 2 * moonPulse);
+      moonGlow.addColorStop(0, "rgba(255,255,255,.15)");
+      moonGlow.addColorStop(0.5, "rgba(200,200,255,.08)");
+      moonGlow.addColorStop(1, "rgba(147,51,234,.02)");
+      ctx.fillStyle = moonGlow;
+      ctx.fillRect(moonX - moonR * 2, moonY - moonR * 2, moonR * 4, moonR * 4);
+      
+      // Moon surface
+      const moonGradient = ctx.createRadialGradient(moonX - moonR * 0.3, moonY - moonR * 0.3, 0, moonX, moonY, moonR);
+      moonGradient.addColorStop(0, "rgba(255,255,255,.95)");
+      moonGradient.addColorStop(0.7, "rgba(240,240,245,.90)");
+      moonGradient.addColorStop(1, "rgba(220,220,235,.85)");
+      ctx.fillStyle = moonGradient;
+      ctx.beginPath();
+      ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Moon craters
+      ctx.fillStyle = "rgba(180,180,200,.3)";
+      ctx.beginPath();
+      ctx.arc(moonX - moonR * 0.3, moonY - moonR * 0.2, moonR * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(moonX + moonR * 0.2, moonY + moonR * 0.1, moonR * 0.05, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Spirit deer (occasional background)
+      if (Math.sin(t * 0.0007) > 0.8) {
+        ctx.save();
+        ctx.globalAlpha = 0.15;
+        ctx.fillStyle = "rgba(147,51,234,.6)";
+        const deerX = (t * 0.1) % (W + 100) - 50;
+        const deerY = World.groundY - 80;
+        // Simplified deer silhouette
+        ctx.beginPath();
+        ctx.ellipse(deerX, deerY, 20, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(deerX - 15, deerY - 5, 8, 12, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      
+      // Fireflies
+      for (let i = 0; i < 12; i++) {
+        const fireflyX = (i * 137 + t * 0.03) % (W + 40) - 20;
+        const fireflyY = 50 + Math.sin(i * 1.7 + t * 0.001) * 60 + Math.sin(t * 0.002 + i) * 30;
+        const fireflyGlow = Math.sin(t * 0.005 + i) * 0.5 + 0.5;
+        
+        ctx.save();
+        ctx.globalAlpha = 0.6 * fireflyGlow;
+        ctx.fillStyle = i % 2 === 0 ? "rgba(100,255,150,.8)" : "rgba(150,100,255,.8)";
+        ctx.beginPath();
+        ctx.arc(fireflyX, fireflyY, 2 + fireflyGlow * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      
+      // Twisted pine trees and brambles (foreground)
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = "rgba(10,10,35,.8)";
+      for (let i = 0; i < 8; i++) {
+        const treeX = i * 120 + (i * 37) % 60;
+        const treeY = World.groundY;
+        const treeHeight = 120 + Math.sin(i * 2.1) * 40;
+        const sway = Math.sin(t * 0.0015 + i * 0.9) * 8;
+        
+        ctx.save();
+        ctx.translate(treeX + sway, treeY);
+        // Tree trunk
+        ctx.fillRect(-8, -treeHeight, 16, treeHeight);
+        // Tree branches
+        ctx.fillRect(-20, -treeHeight + 20, 40, 8);
+        ctx.fillRect(-15, -treeHeight + 35, 30, 6);
+        ctx.restore();
+      }
+      
+      // Glowing thorns on ceiling and floor
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = "rgba(147,51,234,.6)";
+      ctx.lineWidth = 3;
+      ctx.shadowColor = "rgba(147,51,234,.8)";
+      ctx.shadowBlur = 10;
+      
+      // Ceiling thorns
+      for (let i = 0; i < 15; i++) {
+        const thornX = i * 53;
+        ctx.beginPath();
+        ctx.moveTo(thornX, World.ceilingY);
+        ctx.lineTo(thornX + 8, World.ceilingY + 12);
+        ctx.moveTo(thornX + 15, World.ceilingY);
+        ctx.lineTo(thornX + 10, World.ceilingY + 8);
+        ctx.stroke();
+      }
+      
+      // Floor thorns
+      for (let i = 0; i < 15; i++) {
+        const thornX = i * 53 + 25;
+        ctx.beginPath();
+        ctx.moveTo(thornX, World.groundY);
+        ctx.lineTo(thornX - 8, World.groundY - 12);
+        ctx.moveTo(thornX + 15, World.groundY);
+        ctx.lineTo(thornX + 10, World.groundY - 8);
+        ctx.stroke();
+      }
+      
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      
     } else {
       // Normal sky gradient
       const sky = ctx.createLinearGradient(0, 0, 0, H);
@@ -1264,6 +1652,17 @@
       ctx.font = '900 12px "Space Grotesk", system-ui';
       ctx.fillText(`POSEIDON INCOMING: ${Math.max(0, PoseidonCfg.threshold - score)}`, W - 258, 36);
       ctx.restore();
+    } else if (inPoseidon && !inArtemis && score >= 70 && running && !dead) {
+      const k = clamp((score - 70) / 5, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = "rgba(0,0,0,.18)";
+      roundRect(W - 300, 16, 284, 32, 16);
+      ctx.fill();
+      ctx.fillStyle = `rgba(192,192,192,${0.35 + 0.35 * k})`;
+      ctx.font = '900 12px "Space Grotesk", system-ui';
+      ctx.fillText(`ARTEMIS INCOMING: ${Math.max(0, ArtemisCfg.threshold - score)}`, W - 278, 36);
+      ctx.restore();
     }
   }
 
@@ -1288,7 +1687,10 @@
     for (const c of charges) drawCharge(c, t);
     for (const w of waves) drawWave(w, t);
     for (const trident of tridents) drawTrident(t, trident);
+    for (const arrow of arrows) drawArrow(arrow, t);
+    for (const snare of snares) drawSnare(snare, t);
     drawZeus(t);
+    drawArtemis(t);
     drawBlob(t);
     drawHud(t);
     ctx.restore();
